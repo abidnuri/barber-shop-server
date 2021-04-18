@@ -1,131 +1,93 @@
 const express = require('express')
-const app = express()
 const MongoClient = require('mongodb').MongoClient;
-const fileUpload = require("express-fileupload");
-const fs = require("fs-extra");
-const ObjectID = require('mongodb').ObjectId;
-const cors = require('cors');
-const bodyParser = require('body-parser');
-require('dotenv').config()
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const ObjectId = require("mongodb").ObjectId;
 
-const port = 5000
+require("dotenv").config();
 
-app.use(cors());
-app.use(express.json());
+const port = process.env.PORT || 5000
+
+const app = express()
 app.use(express.urlencoded({ extended: false }));
-app.use(fileUpload());
+app.use(cors());
+app.use(bodyParser.json());
+
+app.get('/', (req, res) => {
+  res.send('Hello World!')
+})
+
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.o8ccw.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 client.connect(err => {
-  const serviceCollection = client.db("barber-admin").collection("service");
-  const orderCollection = client.db("barber-admin").collection("orders");
-  const reviewCollection = client.db("barber-admin").collection("reviews");
-  const adminCollection = client.db("barber-admin").collection("admin");
+  const productCollection = client.db("barberAdmin").collection("book");
+  const productCollectionForReviews = client.db("barberAdmin").collection("reviews");
+  const productCollectionForOrder = client.db("barberAdmin").collection("orders");
 
-  app.post('/addService', (req, res) => {
-    const file = req.files.image;
-    const name = req.body.name;
-    const price = req.body.price;
-    const desc = req.body.desc;
-    const filePath = `${__dirname}/services/${file.name}`;
-    const newImage = file.data;
-    const convertImage = newImage.toString("base64");
-    const image = {
-      contentType: file.mimetype,
-      size: file.size,
-      img: Buffer.from(convertImage, "base64"),
-    };
-    serviceCollection.insertOne({ name, price, desc, image })
-      .then((result) => {
-        res.send(result.insertedCount > 0);
-        console.log("Service add to database")
-      });
-  });
-
-  app.get('/services', (req, res) => {
-    serviceCollection.find({}).toArray((err, documents) => {
-      res.send(documents);
+  app.get("/book", (req, res) => {
+    productCollection.find().toArray((err, items) => {
+      res.send(items);
     });
   });
 
-  app.get('/serviceBook/:id', (req, res) => {
-    serviceCollection
-      .find({ _id: ObjectID(req.params.id) })
+  app.post('/addService', (req, res) => {
+    const newProduct = req.body;
+    console.log('adding new product', newProduct);
+    productCollection.insertOne(newProduct)
+      .then((result) => {
+        console.log("inserted count", result.insertedCount);
+        res.send(result.insertedCount > 0);
+      });
+  })
+
+  app.get("/book/:_id", (req, res) => {
+    console.log(req.params._id);
+    productCollection.find({ _id: ObjectId(req.params._id) })
+
       .toArray((err, documents) => {
         res.send(documents[0]);
       });
   });
 
-  app.post('/bookOrder', (req, res) => {
-    const data = req.body;
-    console.log(data);
-    orderCollection.insertOne({ data }).then((result) => {
+  app.get("/reviews", (req, res) => {
+    productCollectionForReviews.find().toArray((err, review) => {
+      res.send(review);
+    });
+  });
+
+  app.post('/comment', (req, res) => {
+    const newReviews = req.body;
+    console.log('adding new reviews', newReviews);
+    productCollectionForReviews.insertOne(newReviews)
+      .then((result) => {
+        console.log("inserted count", result.insertedCount);
+        res.send(result.insertedCount > 0);
+      });
+  })
+
+  app.post("/addOrders", (req, res) => {
+    const newOrder = req.body;
+    productCollectionForOrder.insertOne(newOrder).then((result) => {
       res.send(result.insertedCount > 0);
     });
   });
 
-  app.get('/bookingList', (req, res) => {
-    orderCollection.find()
-      .toArray((err, items) => {
-        res.send(items)
-      })
-  })
-
-  app.post('/addReview', (req, res) => {
-    const newReview = req.body;
-    console.log('adding new review: ', newReview);
-    reviewCollection.insertOne(newReview)
-      .then(result => {
-        console.log('inserted count', result.insertedCount);
-        res.send(result.insertedCount > 0)
-      })
-  })
-
-  app.get('/reviewList', (req, res) => {
-    reviewCollection.find()
-      .toArray((err, documents) => {
-        res.send(documents)
-      })
-  })
-
-  app.post('/addAdmin', (req, res) => {
-    const data = req.body;
-    adminCollection.insertOne(data).then((result) => {
-      res.send(result.insertedCount > 0);
+  app.get("/order", (req, res) => {
+    productCollectionForOrder.find().toArray((err, items) => {
+      res.send(items);
     });
   });
 
-  app.post('/isAdmin', (req, res) => {
-    const email = req.body.email;
-    adminCollection.find({ email: email }).toArray((error, documents) => {
-      res.send(documents.length > 0);
-    });
+  app.delete('/delete/:_id', (req, res) => {
+    productCollection.deleteOne({ _id: ObjectId(req.params.id) })
+      .then((result) => {
+        res.send(result.deletedCount > 0);
+      })
   });
-
 });
 
-app.get('/orderList', (req, res) => {
-  orderCollection.find()
-    .toArray((err, items) => {
-      res.send(items)
-    })
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`)
+  process.env.PORT || port
 })
-
-app.delete('/services/:id', (req, res) => {
-  const id = ObjectID(req.params.id);
-
-  serviceCollection.findOneAndDelete({ _id: id })
-    .then(result => {
-      res.json({ success: !!result.value })
-    })
-    .then(error => {
-      console.log(error);
-    })
-})
-
-app.get('/', (req, res) => {
-  res.send('Welcome Bangladesh')
-})
-
-app.listen(process.env.PORT || port)
